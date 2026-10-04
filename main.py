@@ -19,7 +19,8 @@ from aiogram import Bot, Dispatcher, F
 from aiogram.client.default import DefaultBotProperties
 from aiogram.filters import Command, CommandObject, CommandStart
 from aiogram.types import (BotCommand, BotCommandScopeChat, BotCommandScopeDefault,
-                           CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup, Message)
+                           CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup,
+                           KeyboardButton, Message, ReplyKeyboardMarkup, ReplyKeyboardRemove)
 from fastapi import FastAPI
 from fastapi.responses import HTMLResponse
 
@@ -32,6 +33,7 @@ BOT_SHOW = os.environ.get("BOT_SHOW", "@NamSMS_bot")          # efirda ko'rinadi
 COOLDOWN = int(os.environ.get("COOLDOWN_MIN", "5")) * 60      # bir odam necha daqiqada 1 ta e'lon
 MAX_LEN = int(os.environ.get("MAX_LEN", "150"))                # e'lon matni uzunligi
 AD_TTL = int(os.environ.get("AD_TTL_SEC", "60"))               # reklama efirda necha soniya turadi
+REQUIRED_CHANNEL = os.environ.get("REQUIRED_CHANNEL", "@Namanganliklar_uz").strip()  # bo'sh = tekshirmaslik
 MSG_TTL_MIN = int(os.environ.get("MSG_TTL_MIN", "10"))         # tomoshabin xabari efirda necha daqiqa turadi
 
 AUTO_DEFAULT = os.environ.get("AUTO_MODE", "1")                # 1 = oddiy xabarlar avtomat efirga
@@ -87,6 +89,12 @@ create table if not exists settings(k text primary key, v text);
 create table if not exists words(word text primary key, kind text);
 """)
 db.commit()
+for _sql in ("alter table users add column phone text", "alter table msgs add column phone text"):
+    try:
+        db.execute(_sql)   # eski bazaga yangi ustun qo'shish (bor bo'lsa xato beradi, e'tibor bermaymiz)
+    except sqlite3.OperationalError:
+        pass
+db.commit()
 
 
 def setting(k: str, default: str) -> str:
@@ -139,7 +147,8 @@ def bad_reason(text: str) -> str | None:
     if LINK_RE.search(text):
         return "Havola yoki @username yozish mumkin emas."
     if PHONE_RE.search(text):
-        return "Telefon raqam yozish mumkin emas. Tanishuv bot orqali bo'ladi."
+        return ("Raqamni xabar ichiga yozmang. Keyingi qadamda tasdiqlangan raqamingizni "
+                "efirga qo'shishingiz mumkin.")
     if BLOCK_RE and BLOCK_RE.search(norm(text)):
         return "Xabarda odobsiz so'z bor. Efirga chiqmaydi."
     return None
@@ -161,7 +170,15 @@ def suspect_reason(name: str, text: str) -> str | None:
 
 def kb(*rows):
     return InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text=t, callback_data=d) for t, d in row] for row in rows])
+        [InlineKeyboardButton(text=t, url=d) if d.startswith("http")
+         else InlineKeyboardButton(text=t, callback_data=d) for t, d in row] for row in rows])
+
+
+def fmt_phone(raw: str) -> str:
+    d = re.sub(r"\D", "", raw or "")
+    if len(d) == 12 and d.startswith("998"):
+        return f"+998 {d[3:5]} {d[5:8]} {d[8:10]} {d[10:12]}"
+    return "+" + d
 
 
 def user_link(user) -> str:
@@ -174,39 +191,78 @@ def user_link(user) -> str:
 # ---------------- Bot ----------------
 bot = Bot(BOT_TOKEN, default=DefaultBotProperties(parse_mode="HTML"))
 dp = Dispatcher()
-state: dict[int, dict] = {}   # uid -> {"step": "name"|"text", "name": ...}
+state: dict[int, dict] = {}   # uid -> {"step": "name"|"text"|"phone"|"contact", ...}
 
 HELP = (
     "<b>Qanday ishlaydi?</b>\n"
-    "1. E'loningizni yuborasiz.\n"
-    f"2. U efirda raqami bilan chiqadi (masalan #125) va {MSG_TTL_MIN} daqiqa aylanib turib, "
-    "o'zi o'chadi.\n"
-    "3. Efirda yoqqan odamga yozish uchun:\n"
-    "<code>/yoz 125 Salom, tanishsak bo'ladimi?</code>\n"
-    "4. U rozi bo'lsa, ikkalangizga bir-biringizning profilingiz yuboriladi.\n\n"
-    "Telefon raqam va havolalar efirga chiqmaydi."
+    "1. Ismingiz, yoshingiz, shahringiz va xabaringizni yozasiz.\n"
+    f"2. Xabaringiz efirda {MSG_TTL_MIN} daqiqa aylanib turadi va o'zi o'chadi.\n"
+    "3. Xohlasangiz, telefon raqamingizni ham efirga chiqarishingiz mumkin. Buning uchun "
+    "raqamingizni Telegram orqali tasdiqlaysiz, shunda u rostdan ham sizniki ekanligi tekshiriladi.\n\n"
+    "Xabar ichiga raqam, havola yoki @username yozib bo'lmaydi."
 )
+
+CHANNEL_URL = f"https://t.me/{REQUIRED_CHANNEL.lstrip('@')}" if REQUIRED_CHANNEL else ""
+
+
+async def is_subscribed(uid: int) -> bool:
+    if not REQUIRED_CHANNEL or uid in ADMIN_IDS:
+        return True
+    try:
+        mem = await bot.get_chat_member(REQUIRED_CHANNEL, uid)
+    except Exception as e:
+        # Bot kanalga admin qilinmagan bo'lsa tekshira olmaydi: foydalanuvchini to'xtatmaymiz
+        print(f"[sub] {REQUIRED_CHANNEL} tekshirib bo'lmadi (bot kanalda adminmi?): {e}")
+        return True
+    status = getattr(mem.status, "value", mem.status)
+    return status in ("member", "administrator", "creator") or \
+        (status == "restricted" and getattr(mem, "is_member", False))
+
+
+async def ask_subscribe(chat_id: int):
+    await bot.send_message(
+        chat_id,
+        f"Botdan foydalanish uchun {REQUIRED_CHANNEL} kanaliga a'zo bo'ling.\n\n"
+        "A'zo bo'lgach, «A'zo bo'ldim» tugmasini bosing.",
+        reply_markup=kb([("Kanalga o'tish", CHANNEL_URL)], [("A'zo bo'ldim", "sub:check")]))
 
 
 async def ask_name(chat_id: int, uid: int):
     state[uid] = {"step": "name"}
     await bot.send_message(chat_id, "Ismingiz, yoshingiz va shahringizni yozing.\n"
-                                    "Masalan: <i>Aziz, 25, Namangan</i>")
+                                    "Masalan: <i>Aziz, 25, Namangan</i>",
+                           reply_markup=ReplyKeyboardRemove())
+
+
+async def begin(chat_id: int, uid: int):
+    """Obuna -> 18+ -> ism. Har bosqichda yetishmayotganini so'raydi."""
+    u = get_user(uid)
+    if u["banned"]:
+        return
+    if not await is_subscribed(uid):
+        return await ask_subscribe(chat_id)
+    if not u["adult"]:
+        return await bot.send_message(
+            chat_id, "Assalomu alaykum! Bu SMS CHAT bo'limi.\n\n"
+                     "Bo'lim faqat 18 yoshdan kattalar uchun. Sizga 18 yosh to'lganmi?",
+            reply_markup=kb([("Ha, 18 yoshdan kattaman", "age:yes")], [("Yo'q", "age:no")]))
+    await bot.send_message(chat_id, HELP)
+    await ask_name(chat_id, uid)
 
 
 @dp.message(CommandStart())
 async def cmd_start(m: Message):
-    u = get_user(m.from_user.id)
-    if u["banned"]:
-        return
-    if not u["adult"]:
-        await m.answer("Assalomu alaykum! Bu SMS tanishuv bo'limi.\n\n"
-                       "Bo'lim faqat 18 yoshdan kattalar uchun. Sizga 18 yosh to'lganmi?",
-                       reply_markup=kb([("Ha, 18 yoshdan kattaman", "age:yes")],
-                                       [("Yo'q", "age:no")]))
-        return
-    await m.answer(HELP)
-    await ask_name(m.chat.id, m.from_user.id)
+    await begin(m.chat.id, m.from_user.id)
+
+
+@dp.callback_query(F.data == "sub:check")
+async def cb_sub(c: CallbackQuery):
+    if await is_subscribed(c.from_user.id):
+        await c.message.edit_reply_markup()
+        await c.answer("Rahmat!")
+        await begin(c.message.chat.id, c.from_user.id)
+    else:
+        await c.answer(f"Siz hali {REQUIRED_CHANNEL} kanaliga a'zo emassiz.", show_alert=True)
 
 
 @dp.callback_query(F.data.startswith("age:"))
@@ -215,8 +271,7 @@ async def cb_age(c: CallbackQuery):
     if c.data == "age:yes":
         db.execute("update users set adult=1 where id=?", (c.from_user.id,))
         db.commit()
-        await c.message.answer(HELP)
-        await ask_name(c.message.chat.id, c.from_user.id)
+        await begin(c.message.chat.id, c.from_user.id)
     else:
         await c.message.answer("Kechirasiz, bu bo'lim faqat 18 yoshdan kattalar uchun.")
     await c.answer()
@@ -225,60 +280,6 @@ async def cb_age(c: CallbackQuery):
 @dp.message(Command("help"))
 async def cmd_help(m: Message):
     await m.answer(HELP)
-
-
-@dp.message(Command("yoz"))
-async def cmd_yoz(m: Message, command: CommandObject):
-    u = get_user(m.from_user.id)
-    if u["banned"] or not u["adult"]:
-        return await cmd_start(m)
-    parts = (command.args or "").split(maxsplit=1)
-    if len(parts) < 2 or not parts[0].lstrip("#").isdigit():
-        return await m.answer("Shunday yozing:\n<code>/yoz 125 Salom, tanishsak bo'ladimi?</code>")
-    mid, text = int(parts[0].lstrip("#")), parts[1].strip()[:300]
-    row = db.execute("select user_id from msgs where id=? and status in ('live','archived')",
-                     (mid,)).fetchone()
-    if not row:
-        return await m.answer(f"#{mid} raqamli e'lon topilmadi.")
-    if row["user_id"] == m.from_user.id:
-        return await m.answer("O'z e'loningizga yozolmaysiz.")
-    if reason := bad_reason(text):
-        return await m.answer(reason)
-    cur = db.execute("insert into reqs(from_id, from_name, msg_id, text, created) values(?,?,?,?,?)",
-                     (m.from_user.id, m.from_user.full_name, mid, text, time.time()))
-    db.commit()
-    try:
-        await bot.send_message(
-            row["user_id"],
-            f"<b>#{mid} e'loningizga yangi xabar:</b>\n\n{html.escape(text)}\n\n"
-            "Tanishishni xohlasangiz «Qabul qilish»ni bosing. Shunda ikkalangizga "
-            "bir-biringizning profilingiz yuboriladi.",
-            reply_markup=kb([("Qabul qilish", f"acc:{cur.lastrowid}"),
-                             ("Rad etish", f"rej:{cur.lastrowid}")]))
-        await m.answer("Xabaringiz yetkazildi. U rozi bo'lsa, sizga xabar beraman.")
-    except Exception:
-        await m.answer("Afsuski, bu foydalanuvchiga xabar yetkazib bo'lmadi.")
-
-
-@dp.callback_query(F.data.startswith(("acc:", "rej:")))
-async def cb_req(c: CallbackQuery):
-    rid = int(c.data.split(":")[1])
-    req = db.execute("select * from reqs where id=?", (rid,)).fetchone()
-    await c.message.edit_reply_markup()
-    if not req:
-        return await c.answer("Topilmadi")
-    if c.data.startswith("rej:"):
-        await c.message.answer("Rad etildi.")
-        return await c.answer()
-    from_chat = await bot.get_chat(req["from_id"])
-    await c.message.answer(f"Ajoyib! Mana uning profili: {user_link(from_chat)}\nYaxshi suhbat!")
-    try:
-        await bot.send_message(req["from_id"],
-                               f"#{req['msg_id']} e'lon egasi rozi bo'ldi! "
-                               f"Mana uning profili: {user_link(c.from_user)}\nYaxshi suhbat!")
-    except Exception:
-        pass
-    await c.answer()
 
 
 # ---------- Admin buyruqlari ----------
@@ -482,7 +483,7 @@ async def cb_admin(c: CallbackQuery):
         return await c.answer("Allaqachon ko'rib chiqilgan")
     if act == "ok":
         db.execute("update msgs set status='live', aired=? where id=?", (time.time(), msg["id"]))
-        note, user_text = "EFIRGA CHIQDI", (f"Xabaringiz efirga chiqdi! Raqamingiz: <b>#{msg['id']}</b>\n"
+        note, user_text = "EFIRGA CHIQDI", ("Xabaringiz efirga chiqdi!\n"
                                             f"U {MSG_TTL_MIN} daqiqa efirda turadi, keyin o'zi o'chadi.")
     else:
         db.execute("update msgs set status='rejected' where id=?", (msg["id"],))
@@ -501,14 +502,117 @@ async def cb_admin(c: CallbackQuery):
 
 
 # ---------- Oddiy matn: e'lon yig'ish ----------
+async def ask_phone(chat_id: int, uid: int):
+    """Xabar tayyor: telefon raqam efirga chiqsinmi?"""
+    state[uid]["step"] = "phone"
+    saved = get_user(uid)["phone"]
+    rows = []
+    if saved:
+        rows.append([(f"Ha, {fmt_phone(saved)} chiqsin", "ph:saved")])
+        rows.append([("Boshqa raqamni tasdiqlash", "ph:new")])
+    else:
+        rows.append([("Ha, raqamim chiqsin", "ph:new")])
+    rows.append([("Yo'q, raqamsiz", "ph:no")])
+    await bot.send_message(chat_id, "Telefon raqamingiz ham efirda chiqsinmi?\n\n"
+                                    "Raqam faqat Telegram orqali tasdiqlangandan keyin chiqadi, "
+                                    "shunda u rostdan ham sizniki ekanligi tekshiriladi.",
+                           reply_markup=kb(*rows))
+
+
+@dp.callback_query(F.data.startswith("ph:"))
+async def cb_phone(c: CallbackQuery):
+    uid = c.from_user.id
+    st = state.get(uid)
+    await c.message.edit_reply_markup()
+    await c.answer()
+    if not st or st.get("step") != "phone":
+        return await c.message.answer("Qaytadan boshlash uchun /start bosing.")
+    if c.data == "ph:no":
+        return await finalize(c.message.chat.id, c.from_user, None)
+    if c.data == "ph:saved":
+        return await finalize(c.message.chat.id, c.from_user, get_user(uid)["phone"])
+    st["step"] = "contact"
+    await c.message.answer(
+        "Pastdagi «Raqamimni yuborish» tugmasini bosing. Telegram raqamingizni o'zi yuboradi, "
+        "qo'lda yozish shart emas.",
+        reply_markup=ReplyKeyboardMarkup(
+            keyboard=[[KeyboardButton(text="Raqamimni yuborish", request_contact=True)],
+                      [KeyboardButton(text="Raqamsiz yuborish")]],
+            resize_keyboard=True, one_time_keyboard=True))
+
+
+@dp.message(F.contact)
+async def on_contact(m: Message):
+    uid = m.from_user.id
+    st = state.get(uid)
+    if not st or st.get("step") != "contact":
+        return await m.answer("Qaytadan boshlash uchun /start bosing.", reply_markup=ReplyKeyboardRemove())
+    if m.contact.user_id != uid:
+        return await m.answer("Faqat o'zingizning raqamingizni yuborishingiz mumkin. "
+                              "«Raqamimni yuborish» tugmasini bosing.")
+    phone = re.sub(r"\D", "", m.contact.phone_number)
+    db.execute("update users set phone=? where id=?", (phone, uid))
+    db.commit()
+    await m.answer(f"Raqamingiz tasdiqlandi: {fmt_phone(phone)}", reply_markup=ReplyKeyboardRemove())
+    await finalize(m.chat.id, m.from_user, phone)
+
+
+async def finalize(chat_id: int, user, phone: str | None):
+    """Xabarni saqlaydi: toza bo'lsa darhol efirga, shubhali bo'lsa adminga."""
+    uid = user.id
+    st = state.pop(uid, None)
+    if not st or "text" not in st:
+        return await bot.send_message(chat_id, "Qaytadan boshlash uchun /start bosing.",
+                                      reply_markup=ReplyKeyboardRemove())
+    name, text = st["name"], st["text"]
+    now = time.time()
+    auto = setting("auto", AUTO_DEFAULT) == "1"
+    why = suspect_reason(name, text) if auto else "avtomat rejim o'chiq"
+    phone_line = f"\nTelefon (tasdiqlangan): {fmt_phone(phone)}" if phone else ""
+
+    if why is None:
+        # Toza xabar: admin kutmasdan darhol efirga
+        cur = db.execute("insert into msgs(user_id, name, text, phone, status, created, aired) "
+                         "values(?,?,?,?,'live',?,?)", (uid, name, text, phone, now, now))
+        db.commit()
+        mid = cur.lastrowid
+        await bot.send_message(chat_id,
+                               f"Xabaringiz efirga chiqdi!\n"
+                               f"U {MSG_TTL_MIN} daqiqa efirda turadi, keyin o'zi o'chadi.\n\n"
+                               f"Yana yozmoqchi bo'lsangiz, {COOLDOWN // 60} daqiqadan keyin /start bosing.",
+                               reply_markup=ReplyKeyboardRemove())
+        card = (f"<b>Avtomat efirga chiqdi #{mid}</b>\n{html.escape(name)}\n\n"
+                f"{html.escape(text)}{phone_line}\n\nYuboruvchi: {user_link(user)}")
+        buttons = kb([("Efirdan olish", f"del:{mid}"), ("Olish va bloklash", f"delban:{mid}")])
+        silent = True      # admin telefoni jiringlamaydi
+    else:
+        # Shubhali xabar: admin tekshiradi
+        cur = db.execute("insert into msgs(user_id, name, text, phone, created) values(?,?,?,?,?)",
+                         (uid, name, text, phone, now))
+        db.commit()
+        mid = cur.lastrowid
+        await bot.send_message(chat_id, "Qabul qilindi! Moderator tekshirgach efirga chiqadi.",
+                               reply_markup=ReplyKeyboardRemove())
+        card = (f"<b>Tekshiruv kerak #{mid}</b> ({html.escape(why)})\n{html.escape(name)}\n\n"
+                f"{html.escape(text)}{phone_line}\n\nYuboruvchi: {user_link(user)}")
+        buttons = kb([("Efirga", f"ok:{mid}"), ("Rad etish", f"no:{mid}")],
+                     [("Rad etish va bloklash", f"ban:{mid}")])
+        silent = False
+    for admin in ADMIN_IDS:
+        try:
+            await bot.send_message(admin, card, reply_markup=buttons, disable_notification=silent)
+        except Exception:
+            pass
+
+
 @dp.message(F.text & ~F.text.startswith("/"))
 async def on_text(m: Message):
     uid = m.from_user.id
     u = get_user(uid)
     if u["banned"]:
         return
-    if not u["adult"]:
-        return await cmd_start(m)
+    if not u["adult"] or not await is_subscribed(uid):
+        return await begin(m.chat.id, uid)
     st = state.get(uid)
     if not st:
         return await ask_name(m.chat.id, uid)
@@ -538,43 +642,19 @@ async def on_text(m: Message):
                           "order by created desc limit 1", (uid,)).fetchone()
         if last and time.time() - last["created"] < COOLDOWN:
             left = int((COOLDOWN - (time.time() - last["created"])) // 60) + 1
-            return await m.answer(f"Keyingi e'lonni {left} daqiqadan keyin yuborishingiz mumkin.")
-        now = time.time()
-        auto = setting("auto", AUTO_DEFAULT) == "1"
-        why = suspect_reason(st["name"], text) if auto else "avtomat rejim o'chiq"
+            state.pop(uid, None)
+            return await m.answer(f"Keyingi xabarni {left} daqiqadan keyin yuborishingiz mumkin.")
+        st["text"] = text
+        return await ask_phone(m.chat.id, uid)
 
-        if why is None:
-            # Toza xabar: admin kutmasdan darhol efirga
-            cur = db.execute("insert into msgs(user_id, name, text, status, created, aired) "
-                             "values(?,?,?,'live',?,?)", (uid, st["name"], text, now, now))
-            db.commit()
-            mid = cur.lastrowid
-            state.pop(uid, None)
-            await m.answer(f"Xabaringiz efirga chiqdi! Raqamingiz: <b>#{mid}</b>\n"
-                           f"U {MSG_TTL_MIN} daqiqa efirda turadi, keyin o'zi o'chadi.\n\n"
-                           f"Yana yozmoqchi bo'lsangiz, {COOLDOWN // 60} daqiqadan keyin /start bosing.")
-            card = (f"<b>Avtomat efirga chiqdi #{mid}</b>\n{html.escape(st['name'])}\n\n"
-                    f"{html.escape(text)}\n\nYuboruvchi: {user_link(m.from_user)}")
-            buttons = kb([("Efirdan olish", f"del:{mid}"), ("Olish va bloklash", f"delban:{mid}")])
-            silent = True      # admin telefoni jiringlamaydi
-        else:
-            # Shubhali xabar: admin tekshiradi
-            cur = db.execute("insert into msgs(user_id, name, text, created) values(?,?,?,?)",
-                             (uid, st["name"], text, now))
-            db.commit()
-            mid = cur.lastrowid
-            state.pop(uid, None)
-            await m.answer(f"Qabul qilindi! E'lon raqami: <b>#{mid}</b>\nModerator tekshirgach efirga chiqadi.")
-            card = (f"<b>Tekshiruv kerak #{mid}</b> ({html.escape(why)})\n{html.escape(st['name'])}\n\n"
-                    f"{html.escape(text)}\n\nYuboruvchi: {user_link(m.from_user)}")
-            buttons = kb([("Efirga", f"ok:{mid}"), ("Rad etish", f"no:{mid}")],
-                         [("Rad etish va bloklash", f"ban:{mid}")])
-            silent = False
-        for admin in ADMIN_IDS:
-            try:
-                await bot.send_message(admin, card, reply_markup=buttons, disable_notification=silent)
-            except Exception:
-                pass
+    if st["step"] == "phone":
+        return await m.answer("Yuqoridagi tugmalardan birini tanlang: raqamingiz chiqsinmi yoki yo'q.")
+
+    if st["step"] == "contact":
+        if m.text.strip().lower().startswith("raqamsiz"):
+            return await finalize(m.chat.id, m.from_user, None)
+        return await m.answer("Raqamni qo'lda yozib bo'lmaydi. Pastdagi «Raqamimni yuborish» tugmasini "
+                              "bosing yoki «Raqamsiz yuborish»ni tanlang.")
 
 
 # ---------------- Valyuta kursi va ob-havo (avtomat) ----------------
@@ -688,20 +768,19 @@ def overlay():
 def api_live():
     now = time.time()
     # Faqat oxirgi MSG_TTL_MIN daqiqada chiqqan xabarlar; eskilari qatordan o'zi tushib qoladi
-    rows = db.execute("select id, name, text, aired from msgs where status='live' and aired>? "
+    rows = db.execute("select id, name, text, phone, aired from msgs where status='live' and aired>? "
                       "order by aired desc limit 12", (now - MSG_TTL_MIN * 60,)).fetchall()
     ads = db.execute("select id, text, created from ads where active=1 and created>? order by created",
                      (now - AD_TTL,)).fetchall()
     info = [{"kind": k, "text": v} for k, v in INFO.items() if v]
     pins = db.execute("select id, text from pins where active=1 order by id").fetchall()
-    return {"now": now, "ad_ttl": AD_TTL, "items": [dict(r) for r in rows],
+    return {"now": now, "ad_ttl": AD_TTL, "items": [{**dict(r), "phone": fmt_phone(r["phone"]) if r["phone"] else ""} for r in rows],
             "ads": [dict(a) for a in ads], "info": info, "pins": [dict(p) for p in pins],
             "info_ts": INFO_META["ts"], "info_hour": INFO_META["hour"]}
 
 
 USER_COMMANDS = [
-    BotCommand(command="start", description="E'lon yuborish"),
-    BotCommand(command="yoz", description="Efirdagi e'longa yozish: /yoz 125 Salom"),
+    BotCommand(command="start", description="Efirga xabar yuborish"),
     BotCommand(command="help", description="Qanday ishlaydi"),
 ]
 ADMIN_COMMANDS = USER_COMMANDS + [
@@ -737,7 +816,7 @@ async def setup_menu():
 @dp.message(Command("admin"), F.from_user.id.in_(ADMIN_IDS))
 async def cmd_admin(m: Message):
     await setup_menu()   # admin keyin /start bosgan bo'lsa ham menyu yangilanadi
-    lines = "\n".join(f"/{c.command} — {html.escape(c.description)}" for c in ADMIN_COMMANDS[3:])
+    lines = "\n".join(f"/{c.command} — {html.escape(c.description)}" for c in ADMIN_COMMANDS[2:])
     await m.answer("<b>Admin buyruqlari:</b>\n" + lines)
 
 

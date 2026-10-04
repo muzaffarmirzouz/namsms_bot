@@ -52,6 +52,11 @@
   #card .n { font-size: calc(36px * var(--s)); font-weight: 700; color: #993556; }
   #card .nm { font-size: calc(64px * var(--s)); font-weight: 800; color: #2C2C2A; line-height: 1.15; }
   #card .tx { font-size: calc(54px * var(--s)); font-weight: 600; color: #2C2C2A; margin-top: 6px; line-height: 1.2; }
+  /* Tasdiqlangan telefon raqam (egasi xohlasa) */
+  #card .ph { display: inline-block; margin-top: calc(12px * var(--s)); font-size: calc(54px * var(--s));
+              font-weight: 800; color: #fff; background: #0F6E56; padding: calc(4px * var(--s)) calc(18px * var(--s));
+              border-radius: 8px; }
+  .it .ph { color: #5DCAA5; font-weight: 800; margin-left: calc(10px * var(--s)); }
 
   /* Soatlik kurs va ob-havo kartochkasi (xabar kartochkasi o'rnida, navbat bilan) */
   #card.infocard { background: #085041; border-left-color: #5DCAA5; }
@@ -75,7 +80,7 @@
 <body>
   <div id="adbox"><i id="adlabel">REKLAMA</i><div class="tx"></div><div class="line"></div></div>
 
-  <div id="card"><div class="n"></div><div class="nm"></div><div class="tx"></div></div>
+  <div id="card"><div class="n"></div><div class="nm"></div><div class="tx"></div><div class="ph"></div></div>
 
   <div id="bar" style="display:none">
     <div id="label"><div class="l1" id="l1">SMS CHAT</div><div class="l2" id="l2">{{BOT_SHOW}}</div></div>
@@ -99,7 +104,8 @@
   let sig = "", seen = new Set(), first = true, queue = [], busy = false;
   let ads = [], adKey = "", adTimer = null;
 
-  const userHtml = i => `<span class="it"><b>#${i.id} ${esc(i.name)}:</b> ${esc(i.text)}</span>`;
+  const userHtml = i => `<span class="it"><b>${esc(i.name)}:</b> ${esc(i.text)}`
+    + (i.phone ? ` <span class="ph">${esc(i.phone)}</span>` : "") + `</span>`;
   const adHtml = a => `<span class="ad"><i>${esc(AD_LABEL)}</i>${esc(a.text)}</span>`;
 
   // Kurs va ob-havo (?kurs=0 yoki ?havo=0 bilan o'chiriladi)
@@ -172,10 +178,13 @@
       card.querySelector(".tx").textContent = m.havo || "";
     } else {
       card.classList.remove("infocard");
-      card.querySelector(".n").textContent = "Yangi e'lon #" + m.id;
+      card.querySelector(".n").textContent = "Yangi xabar";
       card.querySelector(".nm").textContent = m.name;
       card.querySelector(".tx").textContent = m.text;
     }
+    const ph = card.querySelector(".ph");
+    ph.textContent = (!m.info && m.phone) ? m.phone : "";
+    ph.style.display = ph.textContent ? "" : "none";
     card.classList.add("on");
     setTimeout(() => {
       card.classList.remove("on");

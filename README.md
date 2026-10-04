@@ -26,6 +26,7 @@ Tomoshabin botga e'lon yozadi. Oddiy xabar darhol OBS efirida chiqadi, shubhalis
 | `BOT_SHOW` | `@NamSMS_bot` | Efirda ko'rinadigan bot nomi |
 | `DB_PATH` | `/data/data.db` | Baza fayli (pastdagi Volume bilan) |
 | `COOLDOWN_MIN` | `5` | Bir odam necha daqiqada 1 ta e'lon yubora oladi |
+| `REQUIRED_CHANNEL` | `@Namanganliklar_uz` | Majburiy a'zolik kanali (bo'sh qoldirilsa tekshirilmaydi) |
 | `MSG_TTL_MIN` | `10` | Tomoshabin xabari efirda necha daqiqa aylanadi, keyin o'zi o'chadi |
 | `MAX_LEN` | `150` | E'lon matni uzunligi |
 | `AUTO_MODE` | `1` | `1` = oddiy xabarlar avtomat efirga, `0` = hammasini admin tasdiqlaydi (botda `/avto` bilan ham o'zgaradi) |
@@ -80,14 +81,16 @@ OBS linki sozlamalari:
 ## Bot qanday ishlaydi
 
 **Tomoshabin:**
-1. `/start` → "18 yoshdan kattamanmi?" tasdig'i.
-2. Ism, yosh, shahar → e'lon matni.
-3. Raqam oladi (masalan #125), admin tasdiqlashini kutadi.
-4. Efirda yoqqan odamga yozish: `/yoz 125 Salom, tanishsak bo'ladimi?`
-5. E'lon egasi "Qabul qilish"ni bossa, ikkalasiga bir-birining profili yuboriladi.
+1. `/start` → @Namanganliklar_uz kanaliga a'zolik tekshiriladi (a'zo bo'lmasa, kanal tugmasi chiqadi).
+2. "18 yoshdan kattamanmi?" tasdig'i.
+3. Ism, yosh, shahar → xabar matni.
+4. "Telefon raqamingiz efirda chiqsinmi?" — xohlasa, raqamini Telegram'ning
+   "Raqamimni yuborish" tugmasi orqali tasdiqlaydi (faqat o'z raqami qabul qilinadi, qo'lda yozib bo'lmaydi).
+   Tasdiqlangan raqam saqlanadi, keyingi safar bir bosishda tanlanadi.
+5. Xabar efirga chiqadi (ekranda raqamsiz, #1/#2 belgilarisiz) va 10 daqiqadan keyin o'chadi.
 
 **Admin:**
-- Admin `/` bosganda barcha buyruqlar menyuda chiqadi (oddiy foydalanuvchiga faqat /start, /yoz, /help). `/admin` hammasini ro'yxat qilib ko'rsatadi.
+- Admin `/` bosganda barcha buyruqlar menyuda chiqadi (oddiy foydalanuvchiga faqat /start va /help). `/admin` hammasini ro'yxat qilib ko'rsatadi.
 - Oddiy xabarlar avtomat efirga chiqadi. Sizga **ovozsiz** xabar keladi (telefon jiringlamaydi),
   tagida **Efirdan olish** va **Olish va bloklash** tugmalari bor.
 - Shubhali xabar (pul, reklama, kanal, raqam, katta harf va h.k.) efirga chiqmaydi, sizga
@@ -114,7 +117,11 @@ shuning uchun ular bir-birini to'smaydi.
 
 ## Himoya
 
-- Telefon raqam, havola va @username bloklanadi.
+- Xabar ichiga yozilgan telefon raqam, havola va @username bloklanadi. Raqam faqat Telegram
+  orqali tasdiqlangan bo'lsa va egasi xohlasa, alohida yashil belgi bilan chiqadi.
+- Botdan foydalanish uchun `REQUIRED_CHANNEL` (standart @Namanganliklar_uz) kanaliga a'zo bo'lish shart.
+  **Muhim:** bot o'sha kanalga admin qilib qo'shilgan bo'lishi kerak, aks holda a'zolikni tekshira olmaydi
+  (bunda tekshiruv o'tkazib yuboriladi va Railway logida `[sub]` xatosi chiqadi).
 - 18 yoshdan kichiklar e'lon bera olmaydi.
 - Bir odam `COOLDOWN_MIN` daqiqada faqat 1 ta e'lon yubora oladi.
 - So'kinish filtri o'zbek (lotin va kirill) va rus tilidagi so'zlarni, "suuuka" kabi cho'zib yozilganlarini ham ushlaydi.
