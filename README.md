@@ -26,6 +26,7 @@ Tomoshabin botga e'lon yozadi. Oddiy xabar darhol OBS efirida chiqadi, shubhalis
 | `BOT_SHOW` | `@NamSMS_bot` | Efirda ko'rinadigan bot nomi |
 | `DB_PATH` | `/data/data.db` | Baza fayli (pastdagi Volume bilan) |
 | `COOLDOWN_MIN` | `5` | Bir odam necha daqiqada 1 ta e'lon yubora oladi |
+| `MSG_TTL_MIN` | `10` | Tomoshabin xabari efirda necha daqiqa aylanadi, keyin o'zi o'chadi |
 | `MAX_LEN` | `150` | E'lon matni uzunligi |
 | `AUTO_MODE` | `1` | `1` = oddiy xabarlar avtomat efirga, `0` = hammasini admin tasdiqlaydi (botda `/avto` bilan ham o'zgaradi) |
 | `CITY_NAME` | `Namangan` | Ob-havo shahri nomi (efirda shunday yoziladi) |

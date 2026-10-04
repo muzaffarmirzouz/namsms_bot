@@ -32,6 +32,7 @@ BOT_SHOW = os.environ.get("BOT_SHOW", "@NamSMS_bot")          # efirda ko'rinadi
 COOLDOWN = int(os.environ.get("COOLDOWN_MIN", "5")) * 60      # bir odam necha daqiqada 1 ta e'lon
 MAX_LEN = int(os.environ.get("MAX_LEN", "150"))                # e'lon matni uzunligi
 AD_TTL = int(os.environ.get("AD_TTL_SEC", "60"))               # reklama efirda necha soniya turadi
+MSG_TTL_MIN = int(os.environ.get("MSG_TTL_MIN", "10"))         # tomoshabin xabari efirda necha daqiqa turadi
 
 AUTO_DEFAULT = os.environ.get("AUTO_MODE", "1")                # 1 = oddiy xabarlar avtomat efirga
 CITY_NAME = os.environ.get("CITY_NAME", "Namangan")            # ob-havo shahri
@@ -177,8 +178,9 @@ state: dict[int, dict] = {}   # uid -> {"step": "name"|"text", "name": ...}
 
 HELP = (
     "<b>Qanday ishlaydi?</b>\n"
-    "1. E'loningizni yuborasiz, moderator tekshiradi.\n"
-    "2. Tasdiqlansa, efirda raqami bilan chiqadi (masalan #125).\n"
+    "1. E'loningizni yuborasiz.\n"
+    f"2. U efirda raqami bilan chiqadi (masalan #125) va {MSG_TTL_MIN} daqiqa aylanib turib, "
+    "o'zi o'chadi.\n"
     "3. Efirda yoqqan odamga yozish uchun:\n"
     "<code>/yoz 125 Salom, tanishsak bo'ladimi?</code>\n"
     "4. U rozi bo'lsa, ikkalangizga bir-biringizning profilingiz yuboriladi.\n\n"
@@ -480,7 +482,8 @@ async def cb_admin(c: CallbackQuery):
         return await c.answer("Allaqachon ko'rib chiqilgan")
     if act == "ok":
         db.execute("update msgs set status='live', aired=? where id=?", (time.time(), msg["id"]))
-        note, user_text = "EFIRGA CHIQDI", f"Xabaringiz efirga chiqdi! Raqamingiz: <b>#{msg['id']}</b>"
+        note, user_text = "EFIRGA CHIQDI", (f"Xabaringiz efirga chiqdi! Raqamingiz: <b>#{msg['id']}</b>\n"
+                                            f"U {MSG_TTL_MIN} daqiqa efirda turadi, keyin o'zi o'chadi.")
     else:
         db.execute("update msgs set status='rejected' where id=?", (msg["id"],))
         note, user_text = "Rad etildi", "Afsuski, xabaringiz efirga chiqmadi. Qoidalarni tekshirib, qayta yuboring."
@@ -522,7 +525,8 @@ async def on_text(m: Message):
             return await m.answer(reason)
         st.update(step="text", name=name)
         return await m.answer(f"Endi efirga chiqadigan xabaringizni yozing ({MAX_LEN} belgigacha).\n"
-                              "Masalan: <i>Salom, jiddiy tanishuv uchun yozing</i>")
+                              "Masalan: <i>Salom, jiddiy tanishuv uchun yozing</i>\n\n"
+                              f"Xabaringiz efirda {MSG_TTL_MIN} daqiqa turadi va keyin o'zi o'chadi.")
 
     if st["step"] == "text":
         text = " ".join(m.text.split())
@@ -546,7 +550,9 @@ async def on_text(m: Message):
             db.commit()
             mid = cur.lastrowid
             state.pop(uid, None)
-            await m.answer(f"Xabaringiz efirga chiqdi! Raqamingiz: <b>#{mid}</b>")
+            await m.answer(f"Xabaringiz efirga chiqdi! Raqamingiz: <b>#{mid}</b>\n"
+                           f"U {MSG_TTL_MIN} daqiqa efirda turadi, keyin o'zi o'chadi.\n\n"
+                           f"Yana yozmoqchi bo'lsangiz, {COOLDOWN // 60} daqiqadan keyin /start bosing.")
             card = (f"<b>Avtomat efirga chiqdi #{mid}</b>\n{html.escape(st['name'])}\n\n"
                     f"{html.escape(text)}\n\nYuboruvchi: {user_link(m.from_user)}")
             buttons = kb([("Efirdan olish", f"del:{mid}"), ("Olish va bloklash", f"delban:{mid}")])
@@ -673,14 +679,17 @@ def root():
 
 @app.get("/overlay", response_class=HTMLResponse)
 def overlay():
-    return OVERLAY_HTML.replace("{{BOT_SHOW}}", html.escape(BOT_SHOW))
+    # no-store: OBS sahifani eslab qolmasin, yangilanish darhol ko'rinsin
+    return HTMLResponse(OVERLAY_HTML.replace("{{BOT_SHOW}}", html.escape(BOT_SHOW)),
+                        headers={"Cache-Control": "no-store, max-age=0"})
 
 
 @app.get("/api/live")
 def api_live():
-    rows = db.execute("select id, name, text, aired from msgs where status='live' "
-                      "order by aired desc limit 12").fetchall()
     now = time.time()
+    # Faqat oxirgi MSG_TTL_MIN daqiqada chiqqan xabarlar; eskilari qatordan o'zi tushib qoladi
+    rows = db.execute("select id, name, text, aired from msgs where status='live' and aired>? "
+                      "order by aired desc limit 12", (now - MSG_TTL_MIN * 60,)).fetchall()
     ads = db.execute("select id, text, created from ads where active=1 and created>? order by created",
                      (now - AD_TTL,)).fetchall()
     info = [{"kind": k, "text": v} for k, v in INFO.items() if v]
