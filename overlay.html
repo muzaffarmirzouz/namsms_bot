@@ -1,0 +1,203 @@
+<!doctype html>
+<html lang="uz">
+<head>
+<meta charset="utf-8">
+<title>SMS Tanishuv Overlay</title>
+<style>
+  html, body { margin: 0; background: transparent; overflow: hidden; width: 1920px; height: 1080px;
+               font-family: "Segoe UI", Arial, sans-serif; }
+  #bar { position: absolute; left: 0; right: 0; bottom: 0; height: 80px; display: none;
+         background: rgba(0, 0, 0, .78); }
+  #label { background: #D4537E; color: #fff; padding: 0 22px; display: flex; flex-direction: column;
+           align-items: center; justify-content: center; flex-shrink: 0; position: relative;
+           z-index: 2; white-space: nowrap; line-height: 1.1; }
+  #label .l1 { font-size: 26px; font-weight: 700; }
+  #label .l2 { font-size: 22px; font-weight: 700; color: #FAC775; margin-top: 2px; }
+  #view { overflow: hidden; flex: 1; display: flex; align-items: center; }
+  #track { display: inline-flex; align-items: center; white-space: nowrap; will-change: transform; }
+  .it { padding: 0 50px; font-size: 34px; color: #fff; }
+  .it b { color: #FAC775; font-weight: 600; }
+
+  /* Admin reklamasi qatorda: boshqa rang va shrift, ismsiz */
+  .ad { margin: 0 30px; padding: 6px 26px; font-size: 34px; font-weight: 700; color: #fff;
+        font-family: Georgia, "Times New Roman", serif; background: #185FA5; border-radius: 6px;
+        display: inline-flex; align-items: center; gap: 16px; }
+  .ad i, #adbox i { font-style: normal; font-family: "Segoe UI", Arial, sans-serif; font-size: 22px;
+          font-weight: 700; background: #EF9F27; color: #412402; padding: 4px 12px; border-radius: 4px; }
+
+  /* Kurs va ob-havo: yashil belgi, oddiy oq matn */
+  .inf { margin: 0 30px; font-size: 32px; color: #fff; display: inline-flex; align-items: center; gap: 14px; }
+  .inf i { font-style: normal; font-size: 22px; font-weight: 700; background: #1D9E75; color: #fff;
+           padding: 4px 12px; border-radius: 4px; }
+
+  @keyframes tick { from { transform: translateX(0) } to { transform: translateX(-50%) } }
+
+  #info { position: absolute; top: 30px; right: 30px; background: rgba(0, 0, 0, .6); color: #fff;
+          font-size: 28px; padding: 10px 22px; border-radius: 8px; }
+  #info b { color: #FAC775; }
+
+  /* Tomoshabin xabari kartochkasi (pastki chap) */
+  #card { position: absolute; left: 40px; bottom: 120px; max-width: 1000px; background: #fff;
+          border-left: 10px solid #D4537E; padding: 20px 30px; transform: translateX(-120%);
+          transition: transform .6s cubic-bezier(.2, .8, .2, 1); }
+  #card.on { transform: translateX(0); }
+  #card .n { font-size: 24px; color: #993556; }
+  #card .nm { font-size: 38px; font-weight: 600; color: #2C2C2A; }
+  #card .tx { font-size: 32px; color: #444441; margin-top: 4px; }
+
+  /* Soatlik kurs va ob-havo kartochkasi (xabar kartochkasi o'rnida, navbat bilan) */
+  #card.infocard { background: #085041; border-left-color: #5DCAA5; }
+  #card.infocard .n { display: inline-block; background: #1D9E75; color: #fff; font-weight: 700;
+                      padding: 3px 12px; border-radius: 4px; }
+  #card.infocard .nm, #card.infocard .tx { color: #fff; font-size: 34px; font-weight: 600; margin-top: 8px; }
+  #card.infocard .tx { color: #9FE1CB; }
+
+  /* Admin reklamasi kartochkasi (yuqori chap, alohida joy) */
+  #adbox { position: absolute; left: 40px; top: 30px; max-width: 1100px; background: #185FA5;
+           border-left: 10px solid #EF9F27; padding: 18px 30px 22px; transform: translateX(-130%);
+           transition: transform .6s cubic-bezier(.2, .8, .2, 1); }
+  #adbox.on { transform: translateX(0); }
+  #adbox .tx { color: #fff; font-family: Georgia, "Times New Roman", serif; font-weight: 700;
+               font-size: 40px; margin-top: 10px; }
+  #adbox .line { height: 5px; background: #EF9F27; margin-top: 14px; transform-origin: left; }
+</style>
+</head>
+<body>
+  <div id="info">Tanishish uchun yozing: <b>{{BOT_SHOW}}</b></div>
+
+  <div id="adbox"><i id="adlabel">REKLAMA</i><div class="tx"></div><div class="line"></div></div>
+
+  <div id="card"><div class="n"></div><div class="nm"></div><div class="tx"></div></div>
+
+  <div id="bar" style="display:none">
+    <div id="label"><div class="l1" id="l1">SMS CHAT</div><div class="l2" id="l2">{{BOT_SHOW}}</div></div>
+    <div id="view"><div id="track"></div></div>
+  </div>
+
+<script>
+  const params = new URLSearchParams(location.search);
+  if (params.get("info") === "0") document.getElementById("info").style.display = "none";
+  const SPEED = Number(params.get("speed") || 140);       // qator tezligi, piksel/soniya
+  const CARD_SEC = Number(params.get("card") || 8);        // xabar kartochkasi necha soniya turadi
+  const AD_EVERY = Number(params.get("adevery") || 2);     // qatorda har nechta xabardan keyin reklama
+  const AD_LABEL = params.get("adlabel") || "REKLAMA";
+  document.getElementById("adlabel").textContent = AD_LABEL;
+
+  const esc = s => String(s).replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+  const bar = document.getElementById("bar"), track = document.getElementById("track");
+  const card = document.getElementById("card"), adbox = document.getElementById("adbox");
+  const adLine = adbox.querySelector(".line");
+
+  let sig = "", seen = new Set(), first = true, queue = [], busy = false;
+  let ads = [], adKey = "", adTimer = null;
+
+  const userHtml = i => `<span class="it"><b>#${i.id} ${esc(i.name)}:</b> ${esc(i.text)}</span>`;
+  const adHtml = a => `<span class="ad"><i>${esc(AD_LABEL)}</i>${esc(a.text)}</span>`;
+
+  // Kurs va ob-havo (?kurs=0 yoki ?havo=0 bilan o'chiriladi)
+  const INFO_EVERY = Number(params.get("infoevery") || 3);
+  const INFO_LABEL = { kurs: "KURS", havo: "OB-HAVO" };
+  const INFO_CARD_SEC = Number(params.get("infocard") || 15);   // soatlik kartochka necha soniya
+  let infos = [], infoTs = null;
+  const infoHtml = f => `<span class="inf"><i>${INFO_LABEL[f.kind] || ""}</i>${esc(f.text)}</span>`;
+
+  function renderTicker(items) {
+    if (!items.length && !ads.length && !infos.length) { bar.style.display = "none"; return; }
+    bar.style.display = "flex";
+    const parts = [];
+    let k = 0, f = 0;
+    if (!items.length) {
+      ads.forEach(a => parts.push(adHtml(a)));
+      infos.forEach(x => parts.push(infoHtml(x)));
+    }
+    items.forEach((i, n) => {
+      parts.push(userHtml(i));
+      if (ads.length && (n + 1) % AD_EVERY === 0) parts.push(adHtml(ads[k++ % ads.length]));
+      if (infos.length && (n + 1) % INFO_EVERY === 0) parts.push(infoHtml(infos[f++ % infos.length]));
+    });
+    if (items.length && ads.length && k === 0) parts.push(adHtml(ads[0]));
+    if (items.length && infos.length && f === 0) infos.forEach(x => parts.push(infoHtml(x)));
+    const one = parts.join("");
+    track.style.animation = "none";
+    track.innerHTML = one + one;
+    void track.offsetWidth;
+    const half = track.scrollWidth / 2;
+    track.style.animation = `tick ${Math.max(10, half / SPEED)}s linear infinite`;
+  }
+
+  // Reklama kartochkasi: eng oxirgi reklama, qolgan vaqti tugaguncha turadi
+  function renderAd(now, ttl) {
+    const a = ads[ads.length - 1];
+    const key = a ? a.id + ":" + a.created : "";
+    if (key === adKey) return;
+    adKey = key;
+    clearTimeout(adTimer);
+    if (!a) { adbox.classList.remove("on"); return; }
+    const left = Math.max(1, a.created + ttl - now);
+    adbox.querySelector(".tx").textContent = a.text;
+    adLine.style.transition = "none";
+    adLine.style.transform = "scaleX(1)";
+    void adLine.offsetWidth;
+    adLine.style.transition = `transform ${left}s linear`;
+    adLine.style.transform = "scaleX(0)";
+    adbox.classList.add("on");
+    adTimer = setTimeout(() => adbox.classList.remove("on"), left * 1000);
+  }
+
+  function nextCard() {
+    if (busy || !queue.length) return;
+    busy = true;
+    const m = queue.shift();
+    if (m.info) {
+      card.classList.add("infocard");
+      card.querySelector(".n").textContent = `Soat ${m.hour} holatiga`;
+      card.querySelector(".nm").textContent = m.kurs || "";
+      card.querySelector(".tx").textContent = m.havo || "";
+    } else {
+      card.classList.remove("infocard");
+      card.querySelector(".n").textContent = "Yangi e'lon #" + m.id;
+      card.querySelector(".nm").textContent = m.name;
+      card.querySelector(".tx").textContent = m.text;
+    }
+    card.classList.add("on");
+    setTimeout(() => {
+      card.classList.remove("on");
+      setTimeout(() => { busy = false; nextCard(); }, 800);
+    }, (m.info ? INFO_CARD_SEC : CARD_SEC) * 1000);
+  }
+
+  async function poll() {
+    try {
+      const r = await fetch("/api/live", { cache: "no-store" });
+      const d = await r.json();
+      ads = d.ads || [];
+      infos = (d.info || []).filter(x => params.get(x.kind) !== "0");
+      const s = d.items.map(i => i.id).join(",") + "|" + ads.map(a => a.id + ":" + a.created).join(",")
+              + "|" + infos.map(x => x.text).join("|");
+      if (s !== sig) { sig = s; renderTicker(d.items); }
+      renderAd(d.now, d.ad_ttl || 60);
+
+      d.items.filter(i => !seen.has(i.id)).sort((a, b) => a.aired - b.aired).forEach(i => {
+        seen.add(i.id);
+        if (!first && d.now - i.aired < 120) queue.push(i);
+      });
+      // Har soat boshida server yangilaydi: yangilangan kurs va ob-havo kartochka bo'lib chiqadi
+      if (infoTs !== null && d.info_ts && d.info_ts !== infoTs && infos.length) {
+        const get = k => (infos.find(x => x.kind === k) || {}).text;
+        queue.unshift({ info: true, hour: d.info_hour, kurs: get("kurs"), havo: get("havo") });
+      }
+      infoTs = d.info_ts || 0;
+      first = false;
+      nextCard();
+    } catch (e) { }
+  }
+
+  // Chapdagi yozuv: 1-qator va 2-qator (linkdan o'zgartirish mumkin)
+  if (params.get("label1")) document.getElementById("l1").textContent = params.get("label1");
+  if (params.get("label2")) document.getElementById("l2").textContent = params.get("label2");
+
+  poll();
+  setInterval(poll, 3000);
+</script>
+</body>
+</html>
