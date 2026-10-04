@@ -51,6 +51,8 @@ URL oxiriga qo'shimcha sozlamalar qo'shish mumkin:
 - `?scale=1.2`: hamma narsani yana kattalashtirish (1.2 = 20% katta, 0.8 = kichikroq). Standart o'lcham telefonda ko'rishga moslangan
 - `?adevery=3`: qatorda har nechta xabardan keyin reklama qo'yilsin (standart 2)
 - `?adlabel=E'LON`: reklama belgisidagi yozuv (standart REKLAMA)
+- `?pinevery=3`: admin e'loni har nechta xabardan keyin chiqsin (standart 2)
+- `?pinlabel=NAM TV`: admin e'loni belgisidagi yozuv (standart ADMIN)
 - `?label1=NAM TV CHAT`: chapdagi yozuvning 1-qatori (standart "SMS CHAT")
 - `?label2=...`: chapdagi yozuvning 2-qatori (standart bot nomi, `BOT_SHOW` dan olinadi)
 
@@ -98,6 +100,8 @@ OBS linki sozlamalari:
 - `/malumot`: kurs va ob-havoni hozir yangilab efirga chiqarish
 - `/stat`: statistika
 - `/tozala`: efirdagi qatorni tozalash (masalan, yangi ko'rsatuv boshida)
+- `/elon Matn`: pastki qatorga doimiy admin e'loni (binafsha fon, ADMIN belgisi). Ekranda kartochka bo'lib chiqmaydi, o'chirmaguningizcha aylanadi
+- `/elonlar`: doimiy e'lonlar ro'yxati, har birida "O'chirish" tugmasi
 - `/reklama Matn`: reklamani efirga chiqarish
 - `/reklamalar`: oxirgi 10 ta reklama, har birida "Yana chiqarish" va "Hozir o'chirish" tugmalari
 

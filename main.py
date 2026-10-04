@@ -80,6 +80,8 @@ create table if not exists reqs(
     msg_id integer, text text, created real);
 create table if not exists ads(
     id integer primary key autoincrement, text text, active integer default 1, created real);
+create table if not exists pins(
+    id integer primary key autoincrement, text text, active integer default 1, created real);
 create table if not exists settings(k text primary key, v text);
 create table if not exists words(word text primary key, kind text);
 """)
@@ -395,6 +397,43 @@ async def cmd_ads(m: Message):
         await m.answer(f"<b>R{r['id']}</b>: {html.escape(r['text'])}", reply_markup=ad_kb(r["id"]))
 
 
+# ---------- Admin e'loni: faqat pastki qatorda, o'chirmaguncha aylanadi ----------
+@dp.message(Command("elon"), F.from_user.id.in_(ADMIN_IDS))
+async def cmd_pin(m: Message, command: CommandObject):
+    text = " ".join((command.args or "").split())
+    if not text:
+        return await m.answer("<b>Admin e'loni</b> pastki qatorda alohida rangda chiqadi va "
+                              "o'chirmaguningizcha aylanib turadi. Ekranda kartochka bo'lib chiqmaydi.\n\n"
+                              "<code>/elon Matn</code> — qo'shish\n<code>/elonlar</code> — ro'yxat va o'chirish")
+    if len(text) > 200:
+        return await m.answer(f"E'lon juda uzun ({len(text)} belgi). 200 belgigacha qisqartiring.")
+    cur = db.execute("insert into pins(text, created) values(?,?)", (text, time.time()))
+    db.commit()
+    await m.answer(f"E'lon pastki qatorga qo'shildi va o'chirmaguningizcha aylanadi.\n\n"
+                   f"<b>E{cur.lastrowid}</b>: {html.escape(text)}",
+                   reply_markup=kb([("O'chirish", f"pindel:{cur.lastrowid}")]))
+
+
+@dp.message(Command("elonlar"), F.from_user.id.in_(ADMIN_IDS))
+async def cmd_pins(m: Message):
+    rows = db.execute("select id, text from pins where active=1 order by id").fetchall()
+    if not rows:
+        return await m.answer("Qatorda admin e'loni yo'q.\nQo'shish: <code>/elon Matn</code>")
+    for r in rows:
+        await m.answer(f"<b>E{r['id']}</b>: {html.escape(r['text'])}",
+                       reply_markup=kb([("O'chirish", f"pindel:{r['id']}")]))
+
+
+@dp.callback_query(F.data.startswith("pindel:"))
+async def cb_pin_del(c: CallbackQuery):
+    if c.from_user.id not in ADMIN_IDS:
+        return await c.answer("Faqat admin uchun", show_alert=True)
+    db.execute("update pins set active=0 where id=?", (int(c.data.split(":")[1]),))
+    db.commit()
+    await c.message.edit_text(c.message.html_text + "\n\n<b>O'chirildi</b>")
+    await c.answer("Qatordan olindi")
+
+
 @dp.callback_query(F.data.startswith(("addel:", "adre:")))
 async def cb_ad(c: CallbackQuery):
     if c.from_user.id not in ADMIN_IDS:
@@ -645,8 +684,9 @@ def api_live():
     ads = db.execute("select id, text, created from ads where active=1 and created>? order by created",
                      (now - AD_TTL,)).fetchall()
     info = [{"kind": k, "text": v} for k, v in INFO.items() if v]
+    pins = db.execute("select id, text from pins where active=1 order by id").fetchall()
     return {"now": now, "ad_ttl": AD_TTL, "items": [dict(r) for r in rows],
-            "ads": [dict(a) for a in ads], "info": info,
+            "ads": [dict(a) for a in ads], "info": info, "pins": [dict(p) for p in pins],
             "info_ts": INFO_META["ts"], "info_hour": INFO_META["hour"]}
 
 
@@ -661,6 +701,8 @@ ADMIN_COMMANDS = USER_COMMANDS + [
     BotCommand(command="tozala", description="Efirdagi qatorni tozalash"),
     BotCommand(command="reklama", description="Reklama chiqarish: /reklama Matn"),
     BotCommand(command="reklamalar", description="Oxirgi reklamalar, qayta chiqarish"),
+    BotCommand(command="elon", description="Pastki qatorga doimiy e'lon: /elon Matn"),
+    BotCommand(command="elonlar", description="Doimiy e'lonlar ro'yxati va o'chirish"),
     BotCommand(command="malumot", description="Kurs va ob-havoni hozir efirga berish"),
     BotCommand(command="avto", description="Avtomat rejimni yoqish/o'chirish"),
     BotCommand(command="taqiq", description="So'kinish qo'shish: /taqiq so'z"),

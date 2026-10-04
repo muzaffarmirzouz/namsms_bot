@@ -35,6 +35,13 @@
   .inf i { font-style: normal; font-size: calc(34px * var(--s)); font-weight: 800; background: #1D9E75;
            color: #fff; padding: calc(5px * var(--s)) calc(16px * var(--s)); border-radius: 6px; }
 
+  /* Admin e'loni (/elon): binafsha fon, ADMIN belgisi, faqat qatorda */
+  .pin { margin: 0 calc(40px * var(--s)); padding: calc(8px * var(--s)) calc(34px * var(--s));
+         font-size: calc(58px * var(--s)); font-weight: 800; color: #fff; background: #534AB7;
+         border-radius: 8px; display: inline-flex; align-items: center; gap: calc(22px * var(--s)); }
+  .pin i { font-style: normal; font-size: calc(34px * var(--s)); font-weight: 800; background: #EEEDFE;
+           color: #26215C; padding: calc(5px * var(--s)) calc(16px * var(--s)); border-radius: 6px; }
+
   @keyframes tick { from { transform: translateX(0) } to { transform: translateX(-50%) } }
 
   /* Tomoshabin xabari kartochkasi (pastki chap) */
@@ -102,17 +109,26 @@
   let infos = [], infoTs = null;
   const infoHtml = f => `<span class="inf"><i>${INFO_LABEL[f.kind] || ""}</i>${esc(f.text)}</span>`;
 
+  // Admin e'lonlari (/elon): har PIN_EVERY xabardan keyin, o'chirilmaguncha aylanadi
+  const PIN_EVERY = Number(params.get("pinevery") || 2);
+  const PIN_LABEL = params.get("pinlabel") || "ADMIN";
+  let pins = [];
+  const pinHtml = p => `<span class="pin"><i>${esc(PIN_LABEL)}</i>${esc(p.text)}</span>`;
+
   function renderTicker(items) {
-    if (!items.length && !ads.length && !infos.length) { bar.style.display = "none"; return; }
+    if (!items.length && !ads.length && !infos.length && !pins.length) { bar.style.display = "none"; return; }
     bar.style.display = "flex";
     const parts = [];
-    let k = 0, f = 0;
+    let k = 0, f = 0, p = 0;
     if (!items.length) {
+      pins.forEach(x => parts.push(pinHtml(x)));
       ads.forEach(a => parts.push(adHtml(a)));
       infos.forEach(x => parts.push(infoHtml(x)));
     }
+    if (items.length && pins.length) parts.push(pinHtml(pins[p++ % pins.length]));
     items.forEach((i, n) => {
       parts.push(userHtml(i));
+      if (pins.length && (n + 1) % PIN_EVERY === 0) parts.push(pinHtml(pins[p++ % pins.length]));
       if (ads.length && (n + 1) % AD_EVERY === 0) parts.push(adHtml(ads[k++ % ads.length]));
       if (infos.length && (n + 1) % INFO_EVERY === 0) parts.push(infoHtml(infos[f++ % infos.length]));
     });
@@ -174,7 +190,9 @@
       ads = d.ads || [];
       infos = (d.info || []).filter(x => params.get(x.kind) !== "0");
       const s = d.items.map(i => i.id).join(",") + "|" + ads.map(a => a.id + ":" + a.created).join(",")
-              + "|" + infos.map(x => x.text).join("|");
+              + "|" + infos.map(x => x.text).join("|")
+              + "|" + (d.pins || []).map(x => x.id).join(",");
+      pins = d.pins || [];
       if (s !== sig) { sig = s; renderTicker(d.items); }
       renderAd(d.now, d.ad_ttl || 60);
 
