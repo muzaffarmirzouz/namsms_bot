@@ -10,11 +10,17 @@
                font-family: "Segoe UI", Arial, sans-serif; }
   #bar { position: absolute; left: 0; right: 0; bottom: 0; height: calc(130px * var(--s)); display: none;
          background: rgba(0, 0, 0, .85); }
-  #label { background: #D4537E; color: #fff; padding: 0 calc(30px * var(--s)); display: flex;
-           flex-direction: column; align-items: center; justify-content: center; flex-shrink: 0;
-           position: relative; z-index: 2; white-space: nowrap; line-height: 1.1; }
-  #label .l1 { font-size: calc(46px * var(--s)); font-weight: 800; }
-  #label .l2 { font-size: calc(34px * var(--s)); font-weight: 700; color: #FAC775; margin-top: 4px; }
+  /* Chap yozuv: "SMS CHAT" va "Xabar yuboring / @bot" bir joyda almashib turadi.
+     Ikkalasi ustma-ust turadi (grid), kenglik eng kattasiga teng bo'ladi, qator sakramaydi. */
+  #label { background: #D4537E; color: #fff; padding: 0 calc(30px * var(--s)); display: grid;
+           place-items: center; flex-shrink: 0; position: relative; z-index: 2; white-space: nowrap;
+           line-height: 1.1; }
+  #label .face { grid-area: 1 / 1; display: flex; flex-direction: column; align-items: center;
+                 transition: opacity .5s; }
+  #label .face.off { opacity: 0; }
+  #label .big { font-size: calc(58px * var(--s)); font-weight: 900; letter-spacing: 1px; }
+  #label .l1 { font-size: calc(36px * var(--s)); font-weight: 800; }
+  #label .l2 { font-size: calc(38px * var(--s)); font-weight: 800; color: #FAC775; margin-top: 4px; }
   #view { overflow: hidden; flex: 1; display: flex; align-items: center; }
   #track { display: inline-flex; align-items: center; white-space: nowrap; will-change: transform; }
   .it { padding: 0 calc(70px * var(--s)); font-size: calc(58px * var(--s)); font-weight: 600; color: #fff; }
@@ -83,7 +89,10 @@
   <div id="card"><div class="n"></div><div class="nm"></div><div class="tx"></div><div class="ph"></div></div>
 
   <div id="bar" style="display:none">
-    <div id="label"><div class="l1" id="l1">SMS CHAT</div><div class="l2" id="l2">{{BOT_SHOW}}</div></div>
+    <div id="label">
+      <div class="face" id="faceA"><div class="big" id="big">SMS CHAT</div></div>
+      <div class="face off" id="faceB"><div class="l1" id="l1">Xabar yuboring</div><div class="l2" id="l2">{{BOT_SHOW}}</div></div>
+    </div>
     <div id="view"><div id="track"></div></div>
   </div>
 
@@ -221,8 +230,12 @@
   }
 
   // Chapdagi yozuv: 1-qator va 2-qator (linkdan o'zgartirish mumkin)
-  if (params.get("label1")) document.getElementById("l1").textContent = params.get("label1");
-  if (params.get("label2")) document.getElementById("l2").textContent = params.get("label2");
+  // ?label1=SMS CHAT  ?label2=Xabar yuboring  (bot nomi BOT_SHOW dan)  ?labelsec=5
+  if (params.get("label1")) document.getElementById("big").textContent = params.get("label1");
+  if (params.get("label2")) document.getElementById("l1").textContent = params.get("label2");
+  const LABEL_SEC = Number(params.get("labelsec") || 5);
+  const faceA = document.getElementById("faceA"), faceB = document.getElementById("faceB");
+  setInterval(() => { faceA.classList.toggle("off"); faceB.classList.toggle("off"); }, LABEL_SEC * 1000);
 
   poll();
   setInterval(poll, 3000);

@@ -195,7 +195,7 @@ state: dict[int, dict] = {}   # uid -> {"step": "name"|"text"|"phone"|"contact",
 
 HELP = (
     "<b>Qanday ishlaydi?</b>\n"
-    "1. Ismingiz, yoshingiz, shahringiz va xabaringizni yozasiz.\n"
+    "1. Ismingizni (xohlasangiz yosh va shaharni ham) va xabaringizni yozasiz.\n"
     f"2. Xabaringiz efirda {MSG_TTL_MIN} daqiqa aylanib turadi va o'zi o'chadi.\n"
     "3. Xohlasangiz, telefon raqamingizni ham efirga chiqarishingiz mumkin. Buning uchun "
     "raqamingizni Telegram orqali tasdiqlaysiz, shunda u rostdan ham sizniki ekanligi tekshiriladi.\n\n"
@@ -229,8 +229,9 @@ async def ask_subscribe(chat_id: int):
 
 async def ask_name(chat_id: int, uid: int):
     state[uid] = {"step": "name"}
-    await bot.send_message(chat_id, "Ismingiz, yoshingiz va shahringizni yozing.\n"
-                                    "Masalan: <i>Aziz, 25, Namangan</i>",
+    await bot.send_message(chat_id, "Ismingizni yozing.\n\n"
+                                    "Xohlasangiz yoshingiz va shahringizni ham qo'shing:\n"
+                                    "<i>Aziz</i> yoki <i>Aziz, 25, Namangan</i>",
                            reply_markup=ReplyKeyboardRemove())
 
 
@@ -619,10 +620,10 @@ async def on_text(m: Message):
 
     if st["step"] == "name":
         name = " ".join(m.text.split())[:40]
-        age = re.search(r"\b(\d{2})\b", name)
-        if not age:
-            return await m.answer("Yoshingizni ham yozing. Masalan: <i>Aziz, 25, Namangan</i>")
-        if int(age.group(1)) < 18:
+        if sum(ch.isalpha() for ch in name) < 2:
+            return await m.answer("Ismingizni yozing. Masalan: <i>Aziz</i>")
+        age = re.search(r"\b(\d{1,2})\b", name)     # yosh ixtiyoriy, lekin yozilsa 18+ bo'lishi kerak
+        if age and int(age.group(1)) < 18:
             state.pop(uid, None)
             return await m.answer("Kechirasiz, bu bo'lim faqat 18 yoshdan kattalar uchun.")
         if reason := bad_reason(name):

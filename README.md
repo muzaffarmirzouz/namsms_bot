@@ -55,8 +55,9 @@ URL oxiriga qo'shimcha sozlamalar qo'shish mumkin:
 - `?adlabel=E'LON`: reklama belgisidagi yozuv (standart REKLAMA)
 - `?pinevery=3`: admin e'loni har nechta xabardan keyin chiqsin (standart 2)
 - `?pinlabel=NAM TV`: admin e'loni belgisidagi yozuv (standart ADMIN)
-- `?label1=NAM TV CHAT`: chapdagi yozuvning 1-qatori (standart "SMS CHAT")
-- `?label2=...`: chapdagi yozuvning 2-qatori (standart bot nomi, `BOT_SHOW` dan olinadi)
+- `?label1=SMS CHAT`: chapdagi katta yozuv (standart "SMS CHAT")
+- `?label2=Xabar yuboring`: almashganda chiqadigan 1-qator (2-qator bot nomi, `BOT_SHOW` dan)
+- `?labelsec=5`: chapdagi yozuv necha soniyada almashsin (standart 5)
 
 Masalan: `.../overlay?speed=100&card=10`
 
@@ -83,7 +84,7 @@ OBS linki sozlamalari:
 **Tomoshabin:**
 1. `/start` → @Namanganliklar_uz kanaliga a'zolik tekshiriladi (a'zo bo'lmasa, kanal tugmasi chiqadi).
 2. "18 yoshdan kattamanmi?" tasdig'i.
-3. Ism, yosh, shahar → xabar matni.
+3. Ism (yosh va shahar ixtiyoriy, yosh yozilsa 18+ bo'lishi shart) → xabar matni.
 4. "Telefon raqamingiz efirda chiqsinmi?" — xohlasa, raqamini Telegram'ning
    "Raqamimni yuborish" tugmasi orqali tasdiqlaydi (faqat o'z raqami qabul qilinadi, qo'lda yozib bo'lmaydi).
    Tasdiqlangan raqam saqlanadi, keyingi safar bir bosishda tanlanadi.
