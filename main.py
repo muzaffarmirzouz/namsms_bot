@@ -18,8 +18,8 @@ import uvicorn
 from aiogram import Bot, Dispatcher, F
 from aiogram.client.default import DefaultBotProperties
 from aiogram.filters import Command, CommandObject, CommandStart
-from aiogram.types import (CallbackQuery, InlineKeyboardButton,
-                           InlineKeyboardMarkup, Message)
+from aiogram.types import (BotCommand, BotCommandScopeChat, BotCommandScopeDefault,
+                           CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup, Message)
 from fastapi import FastAPI
 from fastapi.responses import HTMLResponse
 
@@ -29,7 +29,7 @@ ADMIN_IDS = {int(x) for x in os.environ.get("ADMIN_IDS", "").replace(" ", "").sp
 DB_PATH = os.environ.get("DB_PATH", "data.db")
 PORT = int(os.environ.get("PORT", "8000"))
 BOT_SHOW = os.environ.get("BOT_SHOW", "@NamSMS_bot")          # efirda ko'rinadigan bot nomi
-COOLDOWN = int(os.environ.get("COOLDOWN_MIN", "30")) * 60      # bir odam necha daqiqada 1 ta e'lon
+COOLDOWN = int(os.environ.get("COOLDOWN_MIN", "5")) * 60      # bir odam necha daqiqada 1 ta e'lon
 MAX_LEN = int(os.environ.get("MAX_LEN", "150"))                # e'lon matni uzunligi
 AD_TTL = int(os.environ.get("AD_TTL_SEC", "60"))               # reklama efirda necha soniya turadi
 
@@ -650,7 +650,48 @@ def api_live():
             "info_ts": INFO_META["ts"], "info_hour": INFO_META["hour"]}
 
 
+USER_COMMANDS = [
+    BotCommand(command="start", description="E'lon yuborish"),
+    BotCommand(command="yoz", description="Efirdagi e'longa yozish: /yoz 125 Salom"),
+    BotCommand(command="help", description="Qanday ishlaydi"),
+]
+ADMIN_COMMANDS = USER_COMMANDS + [
+    BotCommand(command="admin", description="Admin buyruqlari ro'yxati"),
+    BotCommand(command="stat", description="Statistika"),
+    BotCommand(command="tozala", description="Efirdagi qatorni tozalash"),
+    BotCommand(command="reklama", description="Reklama chiqarish: /reklama Matn"),
+    BotCommand(command="reklamalar", description="Oxirgi reklamalar, qayta chiqarish"),
+    BotCommand(command="malumot", description="Kurs va ob-havoni hozir efirga berish"),
+    BotCommand(command="avto", description="Avtomat rejimni yoqish/o'chirish"),
+    BotCommand(command="taqiq", description="So'kinish qo'shish: /taqiq so'z"),
+    BotCommand(command="shubha", description="Shubhali so'z qo'shish: /shubha so'z"),
+    BotCommand(command="ochir", description="Qo'shilgan so'zni o'chirish: /ochir so'z"),
+    BotCommand(command="sozlar", description="Qo'shilgan so'zlar va rejim holati"),
+]
+
+
+async def setup_menu():
+    """Oddiy foydalanuvchiga 3 ta, adminlarga hamma buyruqlar menyusi."""
+    try:
+        await bot.set_my_commands(USER_COMMANDS, scope=BotCommandScopeDefault())
+    except Exception as e:
+        print(f"[menu] umumiy menyu xato: {e}")
+    for admin in ADMIN_IDS:
+        try:
+            await bot.set_my_commands(ADMIN_COMMANDS, scope=BotCommandScopeChat(chat_id=admin))
+        except Exception as e:
+            print(f"[menu] admin {admin} menyu xato (u botga /start bosmagan bo'lishi mumkin): {e}")
+
+
+@dp.message(Command("admin"), F.from_user.id.in_(ADMIN_IDS))
+async def cmd_admin(m: Message):
+    await setup_menu()   # admin keyin /start bosgan bo'lsa ham menyu yangilanadi
+    lines = "\n".join(f"/{c.command} — {html.escape(c.description)}" for c in ADMIN_COMMANDS[3:])
+    await m.answer("<b>Admin buyruqlari:</b>\n" + lines)
+
+
 async def main():
+    await setup_menu()
     server = uvicorn.Server(uvicorn.Config(app, host="0.0.0.0", port=PORT, log_level="warning"))
     await asyncio.gather(server.serve(), dp.start_polling(bot), info_loop())
 

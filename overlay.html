@@ -4,67 +4,68 @@
 <meta charset="utf-8">
 <title>SMS Tanishuv Overlay</title>
 <style>
+  /* Telefonda ko'rish uchun hamma o'lchamlar katta. ?scale=1.2 bilan yana kattalashtirish mumkin */
+  :root { --s: 1; }
   html, body { margin: 0; background: transparent; overflow: hidden; width: 1920px; height: 1080px;
                font-family: "Segoe UI", Arial, sans-serif; }
-  #bar { position: absolute; left: 0; right: 0; bottom: 0; height: 80px; display: none;
-         background: rgba(0, 0, 0, .78); }
-  #label { background: #D4537E; color: #fff; padding: 0 22px; display: flex; flex-direction: column;
-           align-items: center; justify-content: center; flex-shrink: 0; position: relative;
-           z-index: 2; white-space: nowrap; line-height: 1.1; }
-  #label .l1 { font-size: 26px; font-weight: 700; }
-  #label .l2 { font-size: 22px; font-weight: 700; color: #FAC775; margin-top: 2px; }
+  #bar { position: absolute; left: 0; right: 0; bottom: 0; height: calc(130px * var(--s)); display: none;
+         background: rgba(0, 0, 0, .85); }
+  #label { background: #D4537E; color: #fff; padding: 0 calc(30px * var(--s)); display: flex;
+           flex-direction: column; align-items: center; justify-content: center; flex-shrink: 0;
+           position: relative; z-index: 2; white-space: nowrap; line-height: 1.1; }
+  #label .l1 { font-size: calc(46px * var(--s)); font-weight: 800; }
+  #label .l2 { font-size: calc(34px * var(--s)); font-weight: 700; color: #FAC775; margin-top: 4px; }
   #view { overflow: hidden; flex: 1; display: flex; align-items: center; }
   #track { display: inline-flex; align-items: center; white-space: nowrap; will-change: transform; }
-  .it { padding: 0 50px; font-size: 34px; color: #fff; }
-  .it b { color: #FAC775; font-weight: 600; }
+  .it { padding: 0 calc(70px * var(--s)); font-size: calc(58px * var(--s)); font-weight: 600; color: #fff; }
+  .it b { color: #FAC775; font-weight: 800; }
 
   /* Admin reklamasi qatorda: boshqa rang va shrift, ismsiz */
-  .ad { margin: 0 30px; padding: 6px 26px; font-size: 34px; font-weight: 700; color: #fff;
-        font-family: Georgia, "Times New Roman", serif; background: #185FA5; border-radius: 6px;
-        display: inline-flex; align-items: center; gap: 16px; }
-  .ad i, #adbox i { font-style: normal; font-family: "Segoe UI", Arial, sans-serif; font-size: 22px;
-          font-weight: 700; background: #EF9F27; color: #412402; padding: 4px 12px; border-radius: 4px; }
+  .ad { margin: 0 calc(40px * var(--s)); padding: calc(8px * var(--s)) calc(34px * var(--s));
+        font-size: calc(58px * var(--s)); font-weight: 700; color: #fff;
+        font-family: Georgia, "Times New Roman", serif; background: #185FA5; border-radius: 8px;
+        display: inline-flex; align-items: center; gap: calc(22px * var(--s)); }
+  .ad i, #adbox i { font-style: normal; font-family: "Segoe UI", Arial, sans-serif;
+          font-size: calc(34px * var(--s)); font-weight: 800; background: #EF9F27; color: #412402;
+          padding: calc(5px * var(--s)) calc(16px * var(--s)); border-radius: 6px; }
 
   /* Kurs va ob-havo: yashil belgi, oddiy oq matn */
-  .inf { margin: 0 30px; font-size: 32px; color: #fff; display: inline-flex; align-items: center; gap: 14px; }
-  .inf i { font-style: normal; font-size: 22px; font-weight: 700; background: #1D9E75; color: #fff;
-           padding: 4px 12px; border-radius: 4px; }
+  .inf { margin: 0 calc(40px * var(--s)); font-size: calc(56px * var(--s)); font-weight: 600; color: #fff;
+         display: inline-flex; align-items: center; gap: calc(20px * var(--s)); }
+  .inf i { font-style: normal; font-size: calc(34px * var(--s)); font-weight: 800; background: #1D9E75;
+           color: #fff; padding: calc(5px * var(--s)) calc(16px * var(--s)); border-radius: 6px; }
 
   @keyframes tick { from { transform: translateX(0) } to { transform: translateX(-50%) } }
 
-  #info { position: absolute; top: 30px; right: 30px; background: rgba(0, 0, 0, .6); color: #fff;
-          font-size: 28px; padding: 10px 22px; border-radius: 8px; }
-  #info b { color: #FAC775; }
-
   /* Tomoshabin xabari kartochkasi (pastki chap) */
-  #card { position: absolute; left: 40px; bottom: 120px; max-width: 1000px; background: #fff;
-          border-left: 10px solid #D4537E; padding: 20px 30px; transform: translateX(-120%);
-          transition: transform .6s cubic-bezier(.2, .8, .2, 1); }
+  #card { position: absolute; left: 40px; bottom: calc(170px * var(--s)); max-width: 1600px; background: #fff;
+          border-left: calc(14px * var(--s)) solid #D4537E; padding: calc(26px * var(--s)) calc(40px * var(--s));
+          transform: translateX(-120%); transition: transform .6s cubic-bezier(.2, .8, .2, 1); }
   #card.on { transform: translateX(0); }
-  #card .n { font-size: 24px; color: #993556; }
-  #card .nm { font-size: 38px; font-weight: 600; color: #2C2C2A; }
-  #card .tx { font-size: 32px; color: #444441; margin-top: 4px; }
+  #card .n { font-size: calc(36px * var(--s)); font-weight: 700; color: #993556; }
+  #card .nm { font-size: calc(64px * var(--s)); font-weight: 800; color: #2C2C2A; line-height: 1.15; }
+  #card .tx { font-size: calc(54px * var(--s)); font-weight: 600; color: #2C2C2A; margin-top: 6px; line-height: 1.2; }
 
   /* Soatlik kurs va ob-havo kartochkasi (xabar kartochkasi o'rnida, navbat bilan) */
   #card.infocard { background: #085041; border-left-color: #5DCAA5; }
-  #card.infocard .n { display: inline-block; background: #1D9E75; color: #fff; font-weight: 700;
-                      padding: 3px 12px; border-radius: 4px; }
-  #card.infocard .nm, #card.infocard .tx { color: #fff; font-size: 34px; font-weight: 600; margin-top: 8px; }
+  #card.infocard .n { display: inline-block; background: #1D9E75; color: #fff; font-weight: 800;
+                      padding: calc(5px * var(--s)) calc(16px * var(--s)); border-radius: 6px; }
+  #card.infocard .nm, #card.infocard .tx { color: #fff; font-size: calc(54px * var(--s)); font-weight: 700;
+                                           margin-top: 10px; }
   #card.infocard .tx { color: #9FE1CB; }
 
   /* Admin reklamasi kartochkasi (yuqori chap, alohida joy) */
-  #adbox { position: absolute; left: 40px; top: 30px; max-width: 1100px; background: #185FA5;
-           border-left: 10px solid #EF9F27; padding: 18px 30px 22px; transform: translateX(-130%);
-           transition: transform .6s cubic-bezier(.2, .8, .2, 1); }
+  #adbox { position: absolute; left: 40px; top: 40px; max-width: 1700px; background: #185FA5;
+           border-left: calc(14px * var(--s)) solid #EF9F27;
+           padding: calc(22px * var(--s)) calc(40px * var(--s)) calc(26px * var(--s));
+           transform: translateX(-130%); transition: transform .6s cubic-bezier(.2, .8, .2, 1); }
   #adbox.on { transform: translateX(0); }
   #adbox .tx { color: #fff; font-family: Georgia, "Times New Roman", serif; font-weight: 700;
-               font-size: 40px; margin-top: 10px; }
-  #adbox .line { height: 5px; background: #EF9F27; margin-top: 14px; transform-origin: left; }
+               font-size: calc(64px * var(--s)); margin-top: 12px; line-height: 1.15; }
+  #adbox .line { height: calc(8px * var(--s)); background: #EF9F27; margin-top: 18px; transform-origin: left; }
 </style>
 </head>
 <body>
-  <div id="info">Tanishish uchun yozing: <b>{{BOT_SHOW}}</b></div>
-
   <div id="adbox"><i id="adlabel">REKLAMA</i><div class="tx"></div><div class="line"></div></div>
 
   <div id="card"><div class="n"></div><div class="nm"></div><div class="tx"></div></div>
@@ -76,7 +77,7 @@
 
 <script>
   const params = new URLSearchParams(location.search);
-  if (params.get("info") === "0") document.getElementById("info").style.display = "none";
+  if (params.get("scale")) document.documentElement.style.setProperty("--s", params.get("scale"));
   const SPEED = Number(params.get("speed") || 140);       // qator tezligi, piksel/soniya
   const CARD_SEC = Number(params.get("card") || 8);        // xabar kartochkasi necha soniya turadi
   const AD_EVERY = Number(params.get("adevery") || 2);     // qatorda har nechta xabardan keyin reklama

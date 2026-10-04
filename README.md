@@ -25,7 +25,7 @@ Tomoshabin botga e'lon yozadi. Oddiy xabar darhol OBS efirida chiqadi, shubhalis
 | `ADMIN_IDS` | `111111,222222` | Tasdiqlaydigan adminlar ID'lari |
 | `BOT_SHOW` | `@NamSMS_bot` | Efirda ko'rinadigan bot nomi |
 | `DB_PATH` | `/data/data.db` | Baza fayli (pastdagi Volume bilan) |
-| `COOLDOWN_MIN` | `30` | Bir odam necha daqiqada 1 ta e'lon yubora oladi |
+| `COOLDOWN_MIN` | `5` | Bir odam necha daqiqada 1 ta e'lon yubora oladi |
 | `MAX_LEN` | `150` | E'lon matni uzunligi |
 | `AUTO_MODE` | `1` | `1` = oddiy xabarlar avtomat efirga, `0` = hammasini admin tasdiqlaydi (botda `/avto` bilan ham o'zgaradi) |
 | `CITY_NAME` | `Namangan` | Ob-havo shahri nomi (efirda shunday yoziladi) |
@@ -48,7 +48,7 @@ URL oxiriga qo'shimcha sozlamalar qo'shish mumkin:
 
 - `?speed=100`: qator tezligi (standart 140)
 - `?card=10`: kartochka necha soniya turadi (standart 8)
-- `?info=0`: yuqoridagi "Tanishish uchun yozing" yozuvini yashirish
+- `?scale=1.2`: hamma narsani yana kattalashtirish (1.2 = 20% katta, 0.8 = kichikroq). Standart o'lcham telefonda ko'rishga moslangan
 - `?adevery=3`: qatorda har nechta xabardan keyin reklama qo'yilsin (standart 2)
 - `?adlabel=E'LON`: reklama belgisidagi yozuv (standart REKLAMA)
 - `?label1=NAM TV CHAT`: chapdagi yozuvning 1-qatori (standart "SMS CHAT")
@@ -84,6 +84,7 @@ OBS linki sozlamalari:
 5. E'lon egasi "Qabul qilish"ni bossa, ikkalasiga bir-birining profili yuboriladi.
 
 **Admin:**
+- Admin `/` bosganda barcha buyruqlar menyuda chiqadi (oddiy foydalanuvchiga faqat /start, /yoz, /help). `/admin` hammasini ro'yxat qilib ko'rsatadi.
 - Oddiy xabarlar avtomat efirga chiqadi. Sizga **ovozsiz** xabar keladi (telefon jiringlamaydi),
   tagida **Efirdan olish** va **Olish va bloklash** tugmalari bor.
 - Shubhali xabar (pul, reklama, kanal, raqam, katta harf va h.k.) efirga chiqmaydi, sizga
